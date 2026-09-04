@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>管理画面 | 日本ミニ建設機械</title><link rel="stylesheet" href="/styles.css"></head>
+<body class="admin-shell">
+<div id="loginView" class="login panel"><div class="eyebrow">管理者専用</div><h1 style="font-size:38px">機械カタログ管理</h1><p class="muted">スマートフォンでも操作しやすい管理画面です。</p>
+<form onsubmit="login(event)"><div class="field"><label>メールアドレス</label><input id="email" type="email" required placeholder="admin1@example.jp"></div><div class="field"><label>パスワード</label><input id="password" type="password" required></div><button class="btn primary" style="width:100%">ログイン</button><p id="loginMsg" class="muted"></p></form>
+<div class="notice" style="margin-top:15px"><b>プレビュー用ログイン</b><br>admin1@example.jp / Preview123!<br>admin2@example.jp / Preview456!</div></div>
+
+<div id="adminView" class="hidden"><header class="admin-top"><div class="admin-wrap admin-top-row"><div><strong>NIPPON MINI MACHINERY</strong><div class="muted" style="font-size:12px">モバイル管理画面</div></div><button class="btn" onclick="logout()">ログアウト</button></div></header>
+<main class="admin-wrap">
+<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h2 style="font-size:28px">機械一覧</h2><div id="adminUser" class="muted"></div></div><button class="btn red" onclick="newMachine()">+ 機械を追加</button></div><div id="machineList" class="machine-list" style="margin-top:18px"></div></div>
+
+<div id="editor" class="panel hidden"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h2 id="editorTitle" style="font-size:28px">機械を追加</h2><button class="btn" onclick="close編集or()">閉じる</button></div>
+<input type="hidden" id="pid">
+<div class="admin-grid">
+<div class="field"><label>機械タイトル</label><input id="ptitle" placeholder="Kubota KH-012 Mini Excavator"></div>
+<div class="field"><label>カテゴリー</label><input id="pcategory" placeholder="Mini Excavator"></div>
+</div>
+<div class="field"><label>説明</label><textarea id="pdesc" placeholder="Describe the machine..."></textarea></div>
+<div class="admin-grid">
+<div class="field"><label>YouTube URL</label><input id="pvideo" placeholder="https://youtu.be/..."></div>
+<div class="field"><label>公開状態</label><select id="pstatus"><option value="published">公開</option><option value="draft">下書き</option><option value="sold">売約済み</option></select></div>
+</div>
+<div class="admin-grid"><div class="field"><label>価格表示</label><select id="pmode"><option value="contact">価格はお問い合わせください</option><option value="show">価格を表示</option></select></div><div class="field"><label>価格（表示する場合）</label><input id="pprice" placeholder="¥1,280,000"></div></div>
+<div class="field"><label>機械写真</label><input id="pimages" type="file" accept="image/*" multiple><div id="imagePreview" class="spec-chips"></div></div>
+
+<div class="field"><label>仕様 <span class="muted">（過去に使用した項目名を候補として表示）</span></label><div id="specs"></div><button type="button" class="btn" onclick="addSpec()">+ 仕様を追加</button></div>
+<div class="actions"><button class="btn primary" onclick="saveMachine()">機械を保存</button><button class="btn" onclick="close編集or()">キャンセル</button></div>
+<p id="saveMsg" class="muted"></p></div>
+</main></div>
+<script src="/admin.js"></script></body></html>

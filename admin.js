@@ -5,21 +5,17 @@ const DEMO_ADMIN_ACCOUNTS = [
 const DEMO_STORAGE_KEY = "jmm_demo_products_v1";
 const DEMO_SESSION_KEY = "jmm_demo_admin_v1";
 const DEMO_PRODUCTS = [{
-  id:"kubota-kh-012",
-  title:"クボタ KH-012 ミニショベル",
-  category:"ミニショベル",
-  description:"日本で取り扱うクボタ KH-012。1tクラスのコンパクトなミニショベルです。",
-  videoUrl:"https://youtu.be/JqDzWHW0vWM",
-  priceMode:"contact", price:"", status:"published",
-  images:["/assets/kubota-kh012.jpg"],
-  specs:[
-    {key:"メーカー",value:"クボタ"},
-    {key:"型式",value:"KH-012"},
-    {key:"クラス",value:"1tクラス"},
-    {key:"機械種類",value:"ミニショベル"},
-    {key:"燃料",value:"ディーゼル"}
-  ]
+ id:"kubota-kh-012", title:"クボタ KH-012 ミニショベル", category:"ミニショベル",
+ description:"日本で取り扱うクボタ KH-012。1tクラスのコンパクトなミニショベルです。写真・動画・主要仕様をご確認いただけます。",
+ videoUrl:"https://youtu.be/JqDzWHW0vWM", priceMode:"show", price:"¥1,500,000", status:"published", images:["/assets/kubota-kh012.jpg"],
+ specs:[{key:"メーカー",value:"クボタ"},{key:"型式",value:"KH-012"},{key:"クラス",value:"1tクラス"},{key:"機械種類",value:"ミニショベル"},{key:"燃料",value:"ディーゼル"}]
+},{
+ id:"mini-excavator-contact", title:"小型ミニショベル", category:"ミニショベル",
+ description:"在庫・仕様・状態に応じて価格をご案内する商品です。詳しい価格はLINEよりお問い合わせください。",
+ videoUrl:"https://youtu.be/JqDzWHW0vWM", priceMode:"contact", price:"", status:"published", images:["/assets/kubota-kh012.jpg"],
+ specs:[{key:"機械種類",value:"ミニショベル"},{key:"価格",value:"お問い合わせ"}]
 }];
+
 
 let currentProducts = [], editing = null, suggestedKeys = new Set();
 const $ = (id) => document.getElementById(id);
@@ -54,11 +50,11 @@ async function login(e) {
   const enteredEmail = $("email").value.trim();
   const enteredPassword = $("password").value;
   msg.textContent = "";
+  msg.classList.remove("error-msg");
 
   // Free owner-preview mode: works on static hosting without a backend.
-  const demo = DEMO_ADMIN_ACCOUNTS.find(a =>
-    a.email.toLowerCase() === enteredEmail.toLowerCase() && a.password === enteredPassword
-  );
+  const accountByEmail = DEMO_ADMIN_ACCOUNTS.find(a => a.email.toLowerCase() === enteredEmail.toLowerCase());
+  const demo = accountByEmail && accountByEmail.password === enteredPassword ? accountByEmail : null;
   if (demo) {
     setDemoLogin(demo.email);
     showAdmin(demo.email);
@@ -77,7 +73,9 @@ async function login(e) {
     return;
   } catch (_) {}
 
-  msg.textContent = "メールアドレスまたはパスワードが正しくありません。";
+  msg.classList.add("error-msg");
+  if (accountByEmail) msg.textContent = "パスワードが正しくありません。もう一度入力してください。";
+  else msg.textContent = "メールアドレスまたはパスワードが正しくありません。";
 }
 
 async function check() {
@@ -119,11 +117,11 @@ async function loadAdminProducts() {
 function renderAdmin() {
   $("machineList").innerHTML = currentProducts.map(p => `
     <div class="machine-row">
-      <img src="${esc((p.images||[])[0]||'/assets/kubota-kh012.jpg')}" onerror="this.src='/assets/kubota-kh012.jpg'">
+      <img src="${escapeAttr((p.images||[])[0]||'/assets/kubota-kh012.jpg')}" onerror="this.src='/assets/kubota-kh012.jpg'">
       <div class="grow"><b>${esc(p.title)}</b><div class="muted">${esc(p.category)} • ${esc(statusLabel(p.status))}</div></div>
       <span class="badge ${esc(p.status)}">${esc(statusLabel(p.status))}</span>
-      <button class="btn" onclick="editMachine('${esc(p.id)}')">編集</button>
-      <button class="btn" onclick="deleteMachine('${esc(p.id)}')">削除</button>
+      <button class="btn" onclick="editMachine('${escapeAttr(p.id)}')">編集</button>
+      <button class="btn" onclick="deleteMachine('${escapeAttr(p.id)}')">削除</button>
     </div>`).join("") || "<div class='notice'>機械はまだ登録されていません。</div>";
 }
 function statusLabel(s){ return ({published:"公開",draft:"下書き",sold:"売約済み"}[s] || s || ""); }

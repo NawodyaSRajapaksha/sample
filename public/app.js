@@ -17,9 +17,11 @@ const DEMO_PRODUCTS = [{
 async function getJSON(url){
  try{const r=await fetch(url);if(!r.ok)throw new Error("Request failed");return await r.json();}
  catch(e){
-  if(url==="/api/products") return DEMO_PRODUCTS;
+  let products=DEMO_PRODUCTS;
+  try{const saved=localStorage.getItem("jmm_demo_products_v1");if(saved)products=JSON.parse(saved)}catch{}
+  if(url==="/api/products") return products.filter(p=>p.status==="published");
   const m=url.match(/^\/api\/products\/(.+)$/);
-  if(m){const id=decodeURIComponent(m[1]);const p=DEMO_PRODUCTS.find(x=>x.id===id);if(p)return p;}
+  if(m){const id=decodeURIComponent(m[1]);const p=products.find(x=>x.id===id && x.status==="published");if(p)return p;}
   throw e;
 } }
 function money(p){return p.priceMode==="show"&&p.price?p.price:"価格はお問い合わせください"}

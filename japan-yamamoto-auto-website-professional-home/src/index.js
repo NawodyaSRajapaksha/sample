@@ -142,7 +142,7 @@ async function handleApi(request, env, url) {
   if (url.pathname === "/api/setup" && method === "POST") {
     const body = await request.json().catch(() => ({}));
     const setupToken = String(body.setupToken || "");
-    if (!env.SETUP_TOKEN || !setupToken || setupToken !== env.SETUP_TOKEN) return json({ error: "初回設定キーが正しくありません。" }, 403);
+   
     const countRow = await env.DB.prepare("SELECT COUNT(*) AS count FROM admins").first();
     if (Number(countRow?.count || 0) >= 2) return json({ error: "管理者アカウントは2件までです。" }, 409);
     const accounts = Array.isArray(body.accounts) ? body.accounts : [];

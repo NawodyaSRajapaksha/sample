@@ -1,6 +1,6 @@
 const SESSION_COOKIE = "yamamoto_session";
 const SESSION_DAYS = 7;
-const PBKDF2_ITERATIONS = 310000;
+const PBKDF2_ITERATIONS = 50000;
 const LINE_ID = "yamamotoauto";
 
 function json(data, status = 200, extra = {}) {
@@ -49,11 +49,11 @@ async function verifyPassword(password, stored) {
     const [scheme, iterText, saltText, hashText] = String(stored).split("$");
     if (scheme !== "pbkdf2-sha256") return false;
     const iterations = Number(iterText);
-    if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 1000000) return false;
+    if (!Number.isInteger(iterations) || iterations < 10000 || iterations > 1000000) return false;
     const salt = fromBase64url(saltText);
     const expected = fromBase64url(hashText);
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
-    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, key, expected.length * 8);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations, hash: "SHA-256" }, key, expected.length * 8);
     return timingSafeEqual(new Uint8Array(bits), expected);
   } catch { return false; }
 }
@@ -165,7 +165,6 @@ async function handleApi(request, env, url) {
   if (url.pathname === "/api/setup" && method === "POST") {
     const body = await request.json().catch(() => ({}));
     
-    // Fixed: Grabs the token safely and removes extra blank spaces
     const setupToken = String(body.setupToken || body.setup_token || body.setupKey || body.key || "").trim();
     const envToken = String(env.SETUP_TOKEN || "").trim();
 

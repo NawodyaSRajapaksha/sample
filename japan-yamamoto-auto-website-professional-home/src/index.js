@@ -9,34 +9,41 @@ function json(data, status = 200, extra = {}) {
     headers: { "content-type": "application/json; charset=utf-8", ...extra }
   });
 }
+
 function nowIso() { return new Date().toISOString(); }
+
 function base64url(bytes) {
   let s = "";
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) s += String.fromCharCode(...bytes.subarray(i, i + chunk));
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
+
 function fromBase64url(str) {
   const b64 = str.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (str.length % 4)) % 4);
   const bin = atob(b64);
   return Uint8Array.from(bin, c => c.charCodeAt(0));
 }
+
 function timingSafeEqual(a, b) {
   if (a.length !== b.length) return false;
   let x = 0;
   for (let i = 0; i < a.length; i++) x |= a[i] ^ b[i];
   return x === 0;
 }
+
 async function sha256Bytes(value) {
   const data = typeof value === "string" ? new TextEncoder().encode(value) : value;
   return new Uint8Array(await crypto.subtle.digest("SHA-256", data));
 }
+
 async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, key, 256);
   return `pbkdf2-sha256$${PBKDF2_ITERATIONS}$${base64url(salt)}$${base64url(new Uint8Array(bits))}`;
 }
+
 async function verifyPassword(password, stored) {
   try {
     const [scheme, iterText, saltText, hashText] = String(stored).split("$");
@@ -46,13 +53,15 @@ async function verifyPassword(password, stored) {
     const salt = fromBase64url(saltText);
     const expected = fromBase64url(hashText);
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
-    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations, hash: "SHA-256" }, key, expected.length * 8);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, key, expected.length * 8);
     return timingSafeEqual(new Uint8Array(bits), expected);
   } catch { return false; }
 }
+
 function cookieOptions(maxAge = SESSION_DAYS * 86400) {
   return `Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
 }
+
 function parseCookies(request) {
   const raw = request.headers.get("Cookie") || "";
   const out = {};
@@ -62,10 +71,12 @@ function parseCookies(request) {
   }
   return out;
 }
+
 function slugId(title) {
   const ascii = String(title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return (ascii || "machine") + "-" + crypto.randomUUID().slice(0, 8);
 }
+
 function normalizeProduct(row) {
   return {
     id: row.id,
@@ -82,12 +93,15 @@ function normalizeProduct(row) {
     updatedAt: row.updated_at
   };
 }
+
 function safeJson(value, fallback) { try { return JSON.parse(value); } catch { return fallback; } }
+
 async function getProduct(db, id, includeDraft = false) {
   const row = await db.prepare("SELECT * FROM products WHERE id = ?").bind(id).first();
   if (!row || (!includeDraft && !["published", "sold"].includes(row.status))) return null;
   return normalizeProduct(row);
 }
+
 async function getAdmin(request, env) {
   const token = parseCookies(request)[SESSION_COOKIE];
   if (!token) return null;
@@ -95,23 +109,29 @@ async function getAdmin(request, env) {
   const row = await env.DB.prepare(`SELECT a.id,a.email,a.name FROM sessions s JOIN admins a ON a.id=s.admin_id WHERE s.token_hash=? AND s.expires_at>?`).bind(hash, nowIso()).first();
   return row || null;
 }
+
 async function requireAdmin(request, env) {
   const admin = await getAdmin(request, env);
   return admin ? { admin } : { response: json({ error: "ログインが必要です。" }, 401) };
 }
+
 async function cleanupSessions(env) {
   try { await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(nowIso()).run(); } catch {}
 }
+
 async function handleApi(request, env, url) {
   const method = request.method;
+
   if (url.pathname === "/api/products" && method === "GET") {
     const { results } = await env.DB.prepare("SELECT * FROM products WHERE status IN ('published','sold') ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'sold' THEN 1 ELSE 2 END, updated_at DESC").all();
     return json(results.map(normalizeProduct));
   }
+
   if (url.pathname.startsWith("/api/products/") && method === "GET") {
     const p = await getProduct(env.DB, decodeURIComponent(url.pathname.slice("/api/products/".length)));
     return p ? json(p) : json({ error: "商品が見つかりません。" }, 404);
   }
+
   if (url.pathname === "/api/login" && method === "POST") {
     await cleanupSessions(env);
     const body = await request.json().catch(() => ({}));
@@ -127,6 +147,7 @@ async function handleApi(request, env, url) {
     await env.DB.prepare("INSERT INTO sessions(token_hash,admin_id,expires_at,created_at) VALUES(?,?,?,?)").bind(tokenHash,row.id,expires,nowIso()).run();
     return json({ email: row.email, name: row.name }, 200, { "Set-Cookie": `${SESSION_COOKIE}=${encodeURIComponent(token)}; ${cookieOptions()}` });
   }
+
   if (url.pathname === "/api/logout" && method === "POST") {
     const token = parseCookies(request)[SESSION_COOKIE];
     if (token) {
@@ -135,32 +156,45 @@ async function handleApi(request, env, url) {
     }
     return json({ ok: true }, 200, { "Set-Cookie": `${SESSION_COOKIE}=; ${cookieOptions(0)}` });
   }
+
   if (url.pathname === "/api/admin/me" && method === "GET") {
     const auth = await requireAdmin(request, env); if (auth.response) return auth.response;
     return json({ email: auth.admin.email, name: auth.admin.name });
   }
+
   if (url.pathname === "/api/setup" && method === "POST") {
     const body = await request.json().catch(() => ({}));
-    const setupToken = String(body.setupToken || "");
-   if (!env.SETUP_TOKEN || !setupToken || setupToken !== env.SETUP_TOKEN) return json({ error: "初回設定キーが正しくありません。" }, 403);
+    const setupToken = String(body.setupToken || body.setup_token || body.setupKey || body.key || "").trim();
+    const envToken = String(env.SETUP_TOKEN || "").trim();
+
+    if (!envToken || !setupToken || !timingSafeEqual(new TextEncoder().encode(setupToken), new TextEncoder().encode(envToken))) {
+      return json({ error: "初回設定キーが正しくありません。" }, 403);
+    }
+
     const countRow = await env.DB.prepare("SELECT COUNT(*) AS count FROM admins").first();
     if (Number(countRow?.count || 0) >= 2) return json({ error: "管理者アカウントは2件までです。" }, 409);
+    
     const accounts = Array.isArray(body.accounts) ? body.accounts : [];
     if (accounts.length !== 2) return json({ error: "管理者アカウントを2件入力してください。" }, 400);
+
     const emails = accounts.map(a => String(a.email || "").trim().toLowerCase());
     const names = accounts.map(a => String(a.name || "").trim());
     const passwords = accounts.map(a => String(a.password || ""));
+
     if (emails.some(e => !/^\S+@\S+\.\S+$/.test(e)) || new Set(emails).size !== 2) return json({ error: "2件のメールアドレスを正しく入力してください。" }, 400);
     if (passwords.some(p => p.length < 12)) return json({ error: "パスワードは12文字以上にしてください。" }, 400);
+
     const hashes = await Promise.all(passwords.map(hashPassword));
     const batch = accounts.map((_,i) => env.DB.prepare("INSERT INTO admins(email,name,password_hash,created_at,updated_at) VALUES(?,?,?,?,?)").bind(emails[i],names[i],hashes[i],nowIso(),nowIso()));
     try { await env.DB.batch(batch); } catch { return json({ error: "管理者アカウントを作成できませんでした。メールアドレスが既に登録されている可能性があります。" }, 409); }
     return json({ ok: true, message: "管理者アカウントを2件作成しました。" });
   }
+
   if (url.pathname === "/api/setup/status" && method === "GET") {
     const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM admins").first();
     return json({ configured: Number(row?.count || 0) >= 2, count: Number(row?.count || 0) });
   }
+
   if (url.pathname === "/api/admin/change-password" && method === "POST") {
     const auth = await requireAdmin(request, env); if (auth.response) return auth.response;
     const body = await request.json().catch(() => ({}));
@@ -173,11 +207,13 @@ async function handleApi(request, env, url) {
     await env.DB.prepare("UPDATE admins SET password_hash=?,updated_at=? WHERE id=?").bind(newHash,nowIso(),auth.admin.id).run();
     return json({ ok: true, message: "パスワードを変更しました。" });
   }
+
   if (url.pathname === "/api/admin/products" && method === "GET") {
     const auth = await requireAdmin(request, env); if (auth.response) return auth.response;
     const { results } = await env.DB.prepare("SELECT * FROM products ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'draft' THEN 1 WHEN 'sold' THEN 2 ELSE 3 END, updated_at DESC").all();
     return json(results.map(normalizeProduct));
   }
+
   if (url.pathname === "/api/admin/products" && method === "POST") {
     const auth = await requireAdmin(request, env); if (auth.response) return auth.response;
     const body = await request.json().catch(() => ({}));
@@ -187,6 +223,7 @@ async function handleApi(request, env, url) {
     await env.DB.prepare("INSERT INTO products(id,title,category,description,video_url,price_mode,price,status,images_json,specs_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,product.title,product.category,product.description,product.videoUrl,product.priceMode,product.price,product.status,JSON.stringify(product.images),JSON.stringify(product.specs),now,now).run();
     return json(await getProduct(env.DB,id,true), 201);
   }
+
   const productMatch = url.pathname.match(/^\/api\/admin\/products\/([^/]+)$/);
   if (productMatch && ["PUT","DELETE"].includes(method)) {
     const auth = await requireAdmin(request, env); if (auth.response) return auth.response;
@@ -203,6 +240,7 @@ async function handleApi(request, env, url) {
     await env.DB.prepare("UPDATE products SET title=?,category=?,description=?,video_url=?,price_mode=?,price=?,status=?,images_json=?,specs_json=?,updated_at=? WHERE id=?").bind(product.title,product.category,product.description,product.videoUrl,product.priceMode,product.price,product.status,JSON.stringify(product.images),JSON.stringify(product.specs),now,id).run();
     return json(await getProduct(env.DB,id,true));
   }
+
   if (url.pathname === "/api/admin/upload" && method === "POST") {
     const auth = await requireAdmin(request, env); if (auth.response) return auth.response;
     if (!env.IMAGES) return json({ error: "画像ストレージがまだ設定されていません。" }, 503);
@@ -221,9 +259,11 @@ async function handleApi(request, env, url) {
     }
     return json({ urls });
   }
+
   if (url.pathname.startsWith("/api/")) return json({ error: "API endpoint not found." }, 404);
   return null;
 }
+
 function validateProduct(body) {
   const title = String(body.title || "").trim();
   if (!title) return { error: "機械タイトルを入力してください。" };
@@ -237,6 +277,7 @@ function validateProduct(body) {
   const specs = Array.isArray(body.specs) ? body.specs.map(s => ({key:String(s?.key||"").trim(),value:String(s?.value||"").trim()})).filter(s=>s.key&&s.value).slice(0,50) : [];
   return { title,category,description,videoUrl,priceMode,price,status,images,specs };
 }
+
 async function mediaResponse(request, env, key) {
   if (!env.IMAGES) return new Response("Not configured", {status:503});
   const obj = await env.IMAGES.get(key);
@@ -247,6 +288,7 @@ async function mediaResponse(request, env, key) {
   headers.set("cache-control", "public, max-age=31536000, immutable");
   return new Response(obj.body, {headers});
 }
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);

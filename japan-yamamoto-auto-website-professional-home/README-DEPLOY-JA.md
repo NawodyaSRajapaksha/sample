@@ -81,3 +81,4 @@ Cloudflare Secret `SETUP_TOKEN` と、2名分の Mail・名前・パスワード
 現在の Worker 名は既存URLを維持するため `sample` のままです。
 
 このプロジェクトの `src/index.js` が本番のバックエンドです。`admin.js` にパスワードを保存していません。
+Production deployment refresh

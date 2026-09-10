@@ -42,27 +42,30 @@ jobs:
           p = Path("src/worker.js")
           s = p.read_text()
 
+          # Make the PBKDF2 implementation use Node's supported crypto API.
           s = re.sub(r'^import \{[^\n]*\} from "node:crypto";\n', '', s, count=1, flags=re.M)
           s = 'import { pbkdf2Sync as nodePbkdf2Sync } from "node:crypto";\n' + s
 
-          pattern = r'async function pbkdf2\(password,salt,iterations=120000\)\{.*?\}'
+          # Replace exactly the whole PBKDF2 function, stopping before ensureSchema.
+          pattern = r'async function pbkdf2\(password,salt,iterations=120000\)\{.*?\}(?=\s*async function ensureSchema)'
           replacement = 'async function pbkdf2(password,salt,iterations=120000){return nodePbkdf2Sync(password,salt,iterations,32,"sha256").toString("hex");}'
           s, n = re.subn(pattern, replacement, s, count=1, flags=re.S)
           if n != 1:
-              raise SystemExit("Could not locate PBKDF2 function; refusing to deploy.")
-
-          # Do not touch the obsolete bootstrap table during requests.
-          s = re.sub(r'^\s*await env\.DB\.prepare\(`CREATE TABLE IF NOT EXISTS yamamoto_admin_bootstrap_v1.*?\n', '', s, count=1, flags=re.M)
-          s = re.sub(r'^\s*await env\.DB\.prepare\("INSERT OR IGNORE INTO yamamoto_admin_bootstrap_v1.*?\n', '', s, count=1, flags=re.M)
+              raise SystemExit("Could not safely replace the PBKDF2 function; refusing to deploy.")
 
           p.write_text(s)
-          print("PBKDF2 compatibility patch applied.")
+          print("PBKDF2 compatibility patch applied safely.")
           PY
 
       - name: Verify patched Worker source
         run: |
           grep -n 'node:crypto' src/worker.js
           grep -n 'async function pbkdf2' src/worker.js
+          grep -n 'async function ensureSchema' src/worker.js
+          if grep -q 'crypto.subtle.deriveBits.*PBKDF2' src/worker.js; then
+            echo 'WebCrypto PBKDF2 implementation is still present.'
+            exit 1
+          fi
 
       - name: Apply D1 migrations
         run: npx --yes wrangler@latest d1 migrations apply yamamoto-auto-db --remote
@@ -78,7 +81,7 @@ jobs:
 
       - name: Smoke test login endpoint
         run: |
-          set +e
+          set -e
           echo "Testing deployed /api/login with an intentionally invalid empty JSON body..."
           curl --http1.1 -sS -D /tmp/login_headers.txt -o /tmp/login_body.txt \
             -X POST "https://yamamoto-auto.nawodyasrajapaksha.workers.dev/api/login" \
@@ -89,12 +92,8 @@ jobs:
           echo "Response body:"
           cat /tmp/login_body.txt
           echo
-          if [ "$status" = "500" ]; then
-            echo "Login endpoint still returns 500."
-            exit 1
-          fi
           if [ "$status" != "400" ]; then
-            echo "Unexpected login smoke-test status: $status"
+            echo "Login smoke test failed: expected HTTP 400 for empty credentials."
             exit 1
           fi
           echo "Login endpoint smoke test passed."

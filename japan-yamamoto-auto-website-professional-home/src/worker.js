@@ -7,7 +7,7 @@ const ADMINS = [
 ];
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
 let schemaPromise = null;
-function json(data,status=200,extra={}){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8",...extra})}
+function json(data,status=200,extra={}){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8",...extra}})}
 function nowIso(){return new Date().toISOString()}
 function getCookie(request,name){for(const part of(request.headers.get("Cookie")||"").split(";")){const[key,...value]=part.trim().split("=");if(key===name)return decodeURIComponent(value.join("="))}return null}
 function parseJson(value,fallback){try{return JSON.parse(value)}catch{return fallback}}

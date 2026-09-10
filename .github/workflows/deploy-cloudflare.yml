@@ -33,27 +33,44 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Fix PBKDF2 implementation for Workers
+      - name: Prepare Worker authentication compatibility
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path("src/worker.js")
           s = p.read_text()
+
+          # Use Workers' supported Node crypto implementation for the existing
+          # 120,000-iteration PBKDF2 hashes.
           if 'from "node:crypto"' not in s:
               s = 'import { pbkdf2Sync as nodePbkdf2Sync } from "node:crypto";\n' + s
           else:
               s = s.replace('import { pbkdf2 as nodePbkdf2 } from "node:crypto";', 'import { pbkdf2Sync as nodePbkdf2Sync } from "node:crypto";')
-          old = 'async function pbkdf2(password,salt,iterations=120000){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:new TextEncoder().encode(salt),iterations,hash:"SHA-256"},key,256);return hex(bits)}'
-          old2 = 'async function pbkdf2(password,salt,iterations=120000){return await new Promise((resolve,reject)=>nodePbkdf2(password,salt,iterations,32,"sha256",(error,key)=>error?reject(error):resolve(key.toString("hex"))));}'
-          new = 'async function pbkdf2(password,salt,iterations=120000){return nodePbkdf2Sync(password,salt,iterations,32,"sha256").toString("hex");}'
-          if old in s:
-              s = s.replace(old, new, 1)
-          elif old2 in s:
-              s = s.replace(old2, new, 1)
-          else:
-              raise SystemExit("PBKDF2 function was not found")
+
+          old_webcrypto = 'async function pbkdf2(password,salt,iterations=120000){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:new TextEncoder().encode(salt),iterations,hash:"SHA-256"},key,256);return hex(bits)}'
+          old_callback = 'async function pbkdf2(password,salt,iterations=120000){return await new Promise((resolve,reject)=>nodePbkdf2(password,salt,iterations,32,"sha256",(error,key)=>error?reject(error):resolve(key.toString("hex"))));}'
+          old_sync = 'async function pbkdf2(password,salt,iterations=120000){return nodePbkdf2Sync(password,salt,iterations,32,"sha256").toString("hex");}'
+          new = old_sync
+          if old_webcrypto in s:
+              s = s.replace(old_webcrypto, new, 1)
+          elif old_callback in s:
+              s = s.replace(old_callback, new, 1)
+
+          # The bootstrap table is no longer needed by the request path. Older
+          # preview databases created it with a different schema, which could
+          # make ensureSchema fail before /api/login was reached. Leave the
+          # table alone and stop creating/inserting into it at runtime.
+          s = s.replace('    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS yamamoto_admin_bootstrap_v1 (id INTEGER PRIMARY KEY CHECK(id=1),created_at TEXT NOT NULL)`).run();\n', '')
+          s = s.replace('    await env.DB.prepare("INSERT OR IGNORE INTO yamamoto_admin_bootstrap_v1(id,created_at) VALUES(1,?)").bind(nowIso()).run();\n', '')
+
           p.write_text(s)
           PY
+
+      - name: Apply D1 migrations
+        run: npx --yes wrangler@latest d1 migrations apply yamamoto-auto-db --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy Worker
         run: npx --yes wrangler@latest deploy

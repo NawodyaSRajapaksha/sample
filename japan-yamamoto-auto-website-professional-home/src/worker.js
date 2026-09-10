@@ -4,8 +4,8 @@ const SESSION_COOKIE = "yamamoto_admin_session";
 const SESSION_TTL = 60 * 60 * 24 * 7;
 const DEFAULT_LINE_ID = "yamamotoauto";
 const ADMINS = [
-  { email: "fujim2021@gmail.com", hash: "f7c80072e612e6ea23db65a13b5d0f0b91fd5cbd8f5a059f2d46239cfb8fbab6", salt: "bcc5d685a3e4bfd08ab56cd991da3818" },
-  { email: "nawodyasrajapaksha@gmail.com", hash: "1b7b5a2cd58880fa3c76a7c5d6715ea1a16f84cbacd45a9885bee95e9f7af6f9", salt: "4b4ffe6b65672553f1e8e99942cc9f0b" }
+  { email: "fujim2021@gmail.com", hash: "fc3e840b35b758e6f1f4ca8a4c15d8b3159a9caa90ee486332d66fa4590c4b25", salt: "bcc5d685a3e4bfd08ab56cd991da3818" },
+  { email: "nawodyasrajapaksha@gmail.com", hash: "f152aacfb61823818d827d728e1556ea23fdb066670d9f6de32c122d93efbd65", salt: "4b4ffe6b65672553f1e8e99942cc9f0b" }
 ];
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
 let schemaPromise = null;
@@ -15,7 +15,7 @@ function getCookie(request,name){for(const part of(request.headers.get("Cookie")
 function parseJson(value,fallback){try{return JSON.parse(value)}catch{return fallback}}
 function hex(bytes){return[...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,"0")).join("")}
 async function sha256(value){return hex(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)))}
-function pbkdf2(password,salt,iterations=120000){return nodePbkdf2Sync(password,salt,iterations,32,"sha256").toString("hex")}
+function pbkdf2(password,salt,iterations=100000){return nodePbkdf2Sync(password,salt,iterations,32,"sha256").toString("hex")}
 async function ensureSchema(env){
   if(schemaPromise)return schemaPromise;
   schemaPromise=(async()=>{

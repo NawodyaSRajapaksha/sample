@@ -40,20 +40,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Fix Worker syntax
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('src/worker.js')
-          s = p.read_text(encoding='utf-8')
-          old = '...extra})}'
-          new = '...extra}})}'
-          if old not in s:
-              raise SystemExit('Expected Worker syntax pattern was not found.')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
-          print('Worker syntax fixed in deployment workspace.')
-          PY
-
       - name: Deploy Worker, assets, D1 and R2 bindings
         run: npx --yes wrangler@latest deploy
         env:

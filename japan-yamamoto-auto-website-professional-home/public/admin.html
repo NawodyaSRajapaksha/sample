@@ -13,8 +13,18 @@
 
 <div id="adminView" class="hidden"><header class="admin-top"><div class="admin-wrap admin-top-row"><div><strong>株式会社 山本オート</strong><div class="muted" style="font-size:12px">モバイル管理画面</div></div><button class="btn" type="button" onclick="logout()">ログアウト</button></div></header>
 <main class="admin-wrap">
-<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h2 style="font-size:28px">機械一覧</h2><div id="adminUser" class="muted"></div></div><button id="addMachineBtn" class="btn red" type="button">+ 機械を追加</button></div><div id="machineList" class="machine-list" style="margin-top:18px"></div></div>
+<div class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div>
+      <h2 style="font-size:28px">機械一覧</h2>
+      <div id="adminUser" class="muted"></div>
+    </div>
 
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="adminSettingsBtn" class="btn" type="button">管理者設定</button>
+      <button id="addMachineBtn" class="btn red" type="button">+ 機械を追加</button>
+    </div>
+  </div>
 <div id="editor" class="panel hidden">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h2 id="editorTitle" style="font-size:28px">機械を追加</h2><button id="closeEditorBtn" class="btn" type="button">閉じる</button></div>
   <input type="hidden" id="pid">

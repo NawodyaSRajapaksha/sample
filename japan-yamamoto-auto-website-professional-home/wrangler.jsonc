@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "yamamoto-auto",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-10",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "yamamoto-auto-db",
+      "database_id": "ebd61331-322e-4aa0-983d-63ee9e201dd7",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

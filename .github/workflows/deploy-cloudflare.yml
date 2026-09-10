@@ -37,9 +37,13 @@ jobs:
         run: |
           grep -n 'node:crypto' src/worker.js
           grep -n 'function pbkdf2' src/worker.js
-          grep -n 'async function ensureSchema' src/worker.js
+          grep -n 'TEMP_BOOTSTRAP_PASSWORD' src/worker.js
           if grep -q 'crypto.subtle.deriveBits.*PBKDF2' src/worker.js; then
             echo 'WebCrypto PBKDF2 implementation is still present.'
+            exit 1
+          fi
+          if ! grep -q 'iterations=100000' src/worker.js; then
+            echo 'PBKDF2 iteration count is not 100000.'
             exit 1
           fi
 
@@ -55,21 +59,21 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Smoke test login endpoint
+      - name: Smoke test real password verification
         run: |
           set -e
-          echo "Testing deployed /api/login with an intentionally invalid empty JSON body..."
+          echo "Testing deployed /api/login with a real admin email and an intentionally wrong password..."
           curl --http1.1 -sS -D /tmp/login_headers.txt -o /tmp/login_body.txt \
             -X POST "https://yamamoto-auto.nawodyasrajapaksha.workers.dev/api/login" \
             -H "content-type: application/json" \
-            --data '{}'
+            --data '{"email":"fujim2021@gmail.com","password":"definitely-wrong-password"}'
           status=$(awk 'NR==1 {print $2}' /tmp/login_headers.txt)
           echo "HTTP status: $status"
           echo "Response body:"
           cat /tmp/login_body.txt
           echo
-          if [ "$status" != "400" ]; then
-            echo "Login smoke test failed: expected HTTP 400 for empty credentials."
+          if [ "$status" != "401" ]; then
+            echo "Real password-verification smoke test failed: expected HTTP 401, not a server error."
             exit 1
           fi
-          echo "Login endpoint smoke test passed."
+          echo "Real password-verification smoke test passed."

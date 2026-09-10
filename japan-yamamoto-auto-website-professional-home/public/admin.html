@@ -14,73 +14,393 @@
 </style>
 </head>
 <body class="admin-shell">
+
 <div id="loginView" class="login panel">
   <div class="eyebrow">管理者専用</div>
   <h1 style="font-size:38px">機械カタログ管理</h1>
   <p class="muted">スマートフォンでも操作しやすい管理画面です。</p>
+
   <form onsubmit="login(event)">
-    <div class="field"><label>メールアドレス</label><input id="email" type="email" required placeholder="管理者メールアドレス"></div>
-    <div class="field"><label>パスワード</label><div style="display:flex;gap:8px"><input id="password" type="password" required style="flex:1"><button class="btn" type="button" id="togglePassword">表示</button></div></div>
-    <button class="btn primary" type="submit" style="width:100%">ログイン</button>
+    <div class="field">
+      <label>メールアドレス</label>
+      <input id="email" type="email" required placeholder="管理者メールアドレス">
+    </div>
+
+    <div class="field">
+      <label>パスワード</label>
+      <div style="display:flex;gap:8px">
+        <input id="password" type="password" required style="flex:1">
+        <button class="btn" type="button" id="togglePassword">表示</button>
+      </div>
+    </div>
+
+    <button class="btn primary" type="submit" style="width:100%">
+      ログイン
+    </button>
+
     <p id="loginMsg" class="muted"></p>
   </form>
 </div>
 
+
 <div id="adminView" class="hidden">
+
 <header class="admin-top">
   <div class="admin-wrap admin-top-row">
-    <div><strong>株式会社 山本オート</strong><div class="muted" style="font-size:12px">モバイル管理画面</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" type="button" onclick="openOwnerSettings()">管理者設定</button>
-      <button class="btn" type="button" onclick="logout()">ログアウト</button>
+
+    <div>
+      <strong>株式会社 山本オート</strong>
+      <div class="muted" style="font-size:12px">
+        モバイル管理画面
+      </div>
     </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" type="button" onclick="openOwnerSettings()">
+        管理者設定
+      </button>
+
+      <button class="btn" type="button" onclick="logout()">
+        ログアウト
+      </button>
+    </div>
+
   </div>
 </header>
 
+
 <main class="admin-wrap">
+
 <div class="panel">
+
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-    <div><h2 style="font-size:28px">機械一覧</h2><div id="adminUser" class="muted"></div></div>
-    <button id="addMachineBtn" class="btn red" type="button">+ 機械を追加</button>
+
+    <div>
+      <h2 style="font-size:28px">機械一覧</h2>
+      <div id="adminUser" class="muted"></div>
+    </div>
+
+    <button id="addMachineBtn" class="btn red" type="button">
+      + 機械を追加
+    </button>
+
   </div>
+
   <div id="machineList" class="machine-list" style="margin-top:18px"></div>
+
 </div>
+
 
 <div id="editor" class="panel hidden">
-  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h2 id="editorTitle" style="font-size:28px">機械を追加</h2><button id="closeEditorBtn" class="btn" type="button">閉じる</button></div>
+
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+
+    <h2 id="editorTitle" style="font-size:28px">
+      機械を追加
+    </h2>
+
+    <button id="closeEditorBtn" class="btn" type="button">
+      閉じる
+    </button>
+
+  </div>
+
   <input type="hidden" id="pid">
+
   <div class="admin-grid">
-    <div class="field"><label>機械タイトル</label><input id="ptitle" placeholder="Kubota KH-012 ミニショベル"></div>
-    <div class="field"><label>カテゴリー</label><input id="pcategory" placeholder="ミニショベル"></div>
+
+    <div class="field">
+      <label>機械タイトル</label>
+      <input id="ptitle" placeholder="Kubota KH-012 ミニショベル">
+    </div>
+
+    <div class="field">
+      <label>カテゴリー</label>
+      <input id="pcategory" placeholder="ミニショベル">
+    </div>
+
   </div>
-  <div class="field"><label>説明</label><textarea id="pdesc" placeholder="機械の状態・特徴などを入力してください。"></textarea></div>
+
+
+  <div class="field">
+    <label>説明</label>
+    <textarea
+      id="pdesc"
+      placeholder="機械の状態・特徴などを入力してください。"
+    ></textarea>
+  </div>
+
+
   <div class="admin-grid">
-    <div class="field"><label>YouTube URL</label><input id="pvideo" placeholder="https://youtu.be/..."></div>
-    <div class="field"><label>販売状態</label><select id="pstatus"><option value="published">販売中</option><option value="draft">下書き</option><option value="sold">売約済み</option></select></div>
+
+    <div class="field">
+      <label>YouTube URL</label>
+      <input id="pvideo" placeholder="https://youtu.be/...">
+    </div>
+
+    <div class="field">
+      <label>販売状態</label>
+
+      <select id="pstatus">
+        <option value="published">販売中</option>
+        <option value="draft">下書き</option>
+        <option value="sold">売約済み</option>
+      </select>
+
+    </div>
+
   </div>
+
+
   <div class="admin-grid">
-    <div class="field"><label>価格表示</label><select id="pmode"><option value="contact">価格はお問い合わせください</option><option value="show">価格を表示</option></select></div>
-    <div class="field"><label>価格（表示する場合）</label><input id="pprice" placeholder="¥1,280,000"></div>
+
+    <div class="field">
+
+      <label>価格表示</label>
+
+      <select id="pmode">
+        <option value="contact">
+          価格はお問い合わせください
+        </option>
+
+        <option value="show">
+          価格を表示
+        </option>
+      </select>
+
+    </div>
+
+
+    <div class="field">
+
+      <label>価格（表示する場合）</label>
+
+      <input id="pprice" placeholder="¥1,280,000">
+
+    </div>
+
   </div>
-  <div class="field"><label class="check-row"><input id="phome" type="checkbox"><span>ホーム画面に掲載する</span></label><div class="muted help-text">ホーム画面には1台のみ掲載できます。チェックした販売中の機械がホーム画面に表示されます。</div></div>
-  <div class="field"><label>機械写真</label><input id="pimages" type="file" accept="image/*" multiple><div class="muted help-text">写真を複数選択できます。「サムネイルに設定」で代表写真を1枚選べます。</div><div id="imagePreview" class="image-manager"></div></div>
-  <div class="field"><label>仕様 <span class="muted">（過去に使用した項目名を候補として表示）</span></label><div id="specs"></div><button id="addSpecBtn" type="button" class="btn">+ 仕様を追加</button></div>
-  <div class="actions"><button id="saveMachineBtn" type="button" class="btn primary">機械を保存</button><button id="cancelEditorBtn" type="button" class="btn">キャンセル</button></div>
+
+
+  <div class="field">
+
+    <label class="check-row">
+      <input id="phome" type="checkbox">
+      <span>ホーム画面に掲載する</span>
+    </label>
+
+    <div class="muted help-text">
+      ホーム画面には1台のみ掲載できます。
+      チェックした販売中の機械がホーム画面に表示されます。
+    </div>
+
+  </div>
+
+
+  <div class="field">
+
+    <label>機械写真</label>
+
+    <input
+      id="pimages"
+      type="file"
+      accept="image/*"
+      multiple
+    >
+
+    <div class="muted help-text">
+      写真を複数選択できます。
+      「サムネイルに設定」で代表写真を1枚選べます。
+    </div>
+
+    <div id="imagePreview" class="image-manager"></div>
+
+  </div>
+
+
+  <div class="field">
+
+    <label>
+      仕様
+      <span class="muted">
+        （過去に使用した項目名を候補として表示）
+      </span>
+    </label>
+
+    <div id="specs"></div>
+
+    <button id="addSpecBtn" type="button" class="btn">
+      + 仕様を追加
+    </button>
+
+  </div>
+
+
+  <div class="actions">
+
+    <button
+      id="saveMachineBtn"
+      type="button"
+      class="btn primary"
+    >
+      機械を保存
+    </button>
+
+    <button
+      id="cancelEditorBtn"
+      type="button"
+      class="btn"
+    >
+      キャンセル
+    </button>
+
+  </div>
+
   <p id="saveMsg" class="muted"></p>
+
 </div>
+
 
 <div id="ownerSettings" class="panel hidden">
-  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h2 style="font-size:28px">管理者設定</h2><button class="btn" type="button" onclick="closeOwnerSettings()">閉じる</button></div>
-  <p class="muted">オーナー用PINで、2つの管理者アカウントを設定できます。パスワードを変更しない場合は空欄のままにしてください。</p>
-  <div class="field"><label>オーナーPIN</label><input id="ownerPin" type="password" placeholder="オーナーPIN"></div>
-  <div class="owner-account"><h3>管理者 1</h3><div class="owner-grid"><div class="field"><label>メールアドレス</label><input id="ownerEmail1" type="email" value="Fujim2021@gmail.com"></div><div class="field"><label>新しいパスワード</label><input id="ownerPassword1" type="password" placeholder="変更する場合のみ入力"></div></div></div>
-  <div class="owner-account"><h3>管理者 2</h3><div class="owner-grid"><div class="field"><label>メールアドレス</label><input id="ownerEmail2" type="email" placeholder="2人目の管理者メールアドレス"></div><div class="field"><label>新しいパスワード</label><input id="ownerPassword2" type="password" placeholder="変更する場合のみ入力"></div></div></div>
-  <div class="actions"><button id="saveOwnerBtn" class="btn primary" type="button" onclick="saveOwnerSettings()">管理者設定を保存</button></div>
+
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+
+    <h2 style="font-size:28px">
+      管理者設定
+    </h2>
+
+    <button
+      class="btn"
+      type="button"
+      onclick="closeOwnerSettings()"
+    >
+      閉じる
+    </button>
+
+  </div>
+
+
+  <p class="muted">
+    オーナー用PINで、2つの管理者アカウントを設定できます。
+    パスワードを変更しない場合は空欄のままにしてください。
+  </p>
+
+
+  <div class="field">
+
+    <label>オーナーPIN</label>
+
+    <input
+      id="ownerPin"
+      type="password"
+      placeholder="オーナーPIN"
+    >
+
+  </div>
+
+
+  <div class="owner-account">
+
+    <h3>管理者 1</h3>
+
+    <div class="owner-grid">
+
+      <div class="field">
+
+        <label>メールアドレス</label>
+
+        <input
+          id="ownerEmail1"
+          type="email"
+          value="Fujim2021@gmail.com"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label>新しいパスワード</label>
+
+        <input
+          id="ownerPassword1"
+          type="password"
+          placeholder="変更する場合のみ入力"
+        >
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <div class="owner-account">
+
+    <h3>管理者 2</h3>
+
+    <div class="owner-grid">
+
+      <div class="field">
+
+        <label>メールアドレス</label>
+
+        <input
+          id="ownerEmail2"
+          type="email"
+          placeholder="2人目の管理者メールアドレス"
+        >
+
+      </div>
+
+
+      <div class="field">
+
+        <label>新しいパスワード</label>
+
+        <input
+          id="ownerPassword2"
+          type="password"
+          placeholder="変更する場合のみ入力"
+        >
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <div class="actions">
+
+    <button
+      id="saveOwnerBtn"
+      class="btn primary"
+      type="button"
+      onclick="saveOwnerSettings()"
+    >
+      管理者設定を保存
+    </button>
+
+  </div>
+
   <p id="ownerMsg" class="muted"></p>
-</div>
-</main>
+
 </div>
 
+</main>
+
+</div>
+
+
 <script src="admin.js"></script>
-<script>document.getElementById('togglePassword')?.addEventListener('click',()=>{const x=document.getElementById('password');x.type=x.type==='password'?'text':'password'});</script>
-</body></html>
+
+<script>
+document.getElementById('togglePassword')?.addEventListener('click',()=>{
+  const x=document.getElementById('password');
+  x.type=x.type==='password'?'text':'password';
+});
+</script>
+
+</body>
+</html>

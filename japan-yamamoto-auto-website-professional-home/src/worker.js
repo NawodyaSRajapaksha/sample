@@ -1,1 +1,301 @@
-const SESSION_COOKIE="yamamoto_admin_session",SESSION_TTL=604800,DEFAULT_LINE_ID="yamamotoauto";const corsHeaders={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,PUT,DELETE,OPTIONS","Access-Control-Allow-Headers":"Content-Type"};function json(d,s=200,e={}){return new Response(JSON.stringify(d),{status:s,headers:{"Content-Type":"application/json; charset=utf-8",...e}})}function nowIso(){return new Date().toISOString()}function getCookie(r,n){for(const p of(r.headers.get("Cookie")||"").split(";")){const[k,...v]=p.trim().split("=");if(k===n)return decodeURIComponent(v.join("="))}return null}async function sha256Bytes(x){return new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(x)))}function b64(a){let s="";for(const b of a)s+=String.fromCharCode(b);return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"")}async function sha256B64(x){return b64(await sha256Bytes(x))}async function pbkdf2Hex(p,s,i=120000){const k=await crypto.subtle.importKey("raw",new TextEncoder().encode(p),"PBKDF2",false,["deriveBits"]),b=await crypto.subtle.deriveBits({name:"PBKDF2",salt:new TextEncoder().encode(s),iterations:i,hash:"SHA-256"},k,256);return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}function productView(r,imgs,specs){return{id:r.id,title:r.title,category:r.category||"ミニショベル",description:r.description||"",videoUrl:r.youtube_url||"",priceMode:r.price_type||"contact",price:r.price||"",status:r.status||"draft",featured:Boolean(r.featured),images:imgs||[],specs:specs||[],lineId:r.line_id||DEFAULT_LINE_ID,createdAt:r.created_at,updatedAt:r.updated_at}}async function getProduct(env,id,all=false){const r=await env.DB.prepare("SELECT * FROM products WHERE id=?").bind(id).first();if(!r||(!all&&!['published','sold'].includes(r.status)))return null;const{results:imgs}=await env.DB.prepare("SELECT image_url,is_thumbnail,sort_order FROM product_images WHERE product_id=? ORDER BY sort_order,id").bind(id).all(),{results:specs}=await env.DB.prepare("SELECT spec_name AS key,spec_value AS value,sort_order FROM product_specs WHERE product_id=? ORDER BY sort_order,id").bind(id).all();imgs.sort((a,b)=>(Number(b.is_thumbnail)-Number(a.is_thumbnail))||a.sort_order-b.sort_order);return productView(r,imgs.map(x=>x.image_url),specs)}async function verifyAdmin(req,env){const t=getCookie(req,SESSION_COOKIE);if(!t)return null;return await env.DB.prepare("SELECT a.id,a.email,a.name FROM sessions s JOIN admins a ON a.id=s.admin_id WHERE s.id=? AND s.expires_at>? ").bind(await sha256B64(t),nowIso()).first()}async function requireAdmin(req,env){const a=await verifyAdmin(req,env);return a?{admin:a}:{response:json({error:"ログインが必要です。"},401)}}async function listProducts(env,all=false){const sql=all?"SELECT * FROM products ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'draft' THEN 1 WHEN 'sold' THEN 2 ELSE 9 END,updated_at DESC":"SELECT * FROM products WHERE status IN ('published','sold') ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'sold' THEN 1 ELSE 9 END,updated_at DESC";const{results}=await env.DB.prepare(sql).all();return Promise.all(results.map(r=>getProduct(env,r.id,true)))}function payload(b){b=b||{};return{title:String(b.title||"").trim(),description:String(b.description||"").trim(),price:String(b.price||"").trim(),priceType:["show","contact"].includes(b.priceMode)?b.priceMode:"contact",youtubeUrl:String(b.videoUrl||"").trim(),status:["published","draft","sold"].includes(b.status)?b.status:"draft",featured:Boolean(b.featured),images:Array.isArray(b.images)?b.images.filter(x=>typeof x==="string").slice(0,20):[],specs:Array.isArray(b.specs)?b.specs.filter(x=>x&&x.key).slice(0,40).map(x=>({key:String(x.key).trim(),value:String(x.value||"").trim()})).filter(x=>x.key):[],lineId:String(b.lineId||DEFAULT_LINE_ID).trim()||DEFAULT_LINE_ID}}async function replaceChildren(env,id,imgs,specs){await env.DB.prepare("DELETE FROM product_images WHERE product_id=?").bind(id).run();await env.DB.prepare("DELETE FROM product_specs WHERE product_id=?").bind(id).run();for(let i=0;i<imgs.length;i++)await env.DB.prepare("INSERT INTO product_images(product_id,image_url,sort_order,is_thumbnail) VALUES(?,?,?,?)").bind(id,imgs[i],i,i===0?1:0).run();for(let i=0;i<specs.length;i++){await env.DB.prepare("INSERT OR IGNORE INTO spec_names(name) VALUES(?)").bind(specs[i].key).run();await env.DB.prepare("INSERT INTO product_specs(product_id,spec_name,spec_value,sort_order) VALUES(?,?,?,?)").bind(id,specs[i].key,specs[i].value,i).run()}}function slug(t){const s=String(t||"machine").normalize("NFKD").replace(/[^a-zA-Z0-9]+/g,"-").replace(/^-+|-+$/g,"").toLowerCase();return(s||"machine")+"-"+Date.now().toString(36)}async function createProduct(req,env){const a=await requireAdmin(req,env);if(a.response)return a.response;const p=payload(await req.json().catch(()=>({})));if(!p.title)return json({error:"機械タイトルを入力してください。"},400);const id=slug(p.title),now=nowIso();if(p.featured)await env.DB.prepare("UPDATE products SET featured=0").run();await env.DB.prepare("INSERT INTO products(id,title,description,price,price_type,youtube_url,phone,mail,line_id,status,featured,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,p.title,p.description,p.price,p.priceType,p.youtubeUrl,"0544-78-0595","Fujim2021@gmail.com",p.lineId,p.status,p.featured?1:0,now,now).run();await replaceChildren(env,id,p.images,p.specs);return json({product:await getProduct(env,id,true)},201)}async function updateProduct(req,env,id){const a=await requireAdmin(req,env);if(a.response)return a.response;const old=await getProduct(env,id,true);if(!old)return json({error:"機械が見つかりません。"},404);const p=payload(await req.json().catch(()=>({})));if(!p.title)return json({error:"機械タイトルを入力してください。"},400);if(p.featured)await env.DB.prepare("UPDATE products SET featured=0 WHERE id<>?").bind(id).run();await env.DB.prepare("UPDATE products SET title=?,description=?,price=?,price_type=?,youtube_url=?,phone=?,mail=?,line_id=?,status=?,featured=?,updated_at=? WHERE id=?").bind(p.title,p.description,p.price,p.priceType,p.youtubeUrl,"0544-78-0595","Fujim2021@gmail.com",p.lineId,p.status,p.featured?1:0,nowIso(),id).run();await replaceChildren(env,id,p.images,p.specs);return json({product:await getProduct(env,id,true)})}async function upload(req,env){const a=await requireAdmin(req,env);if(a.response)return a.response;if(!env.IMAGES)return json({error:"画像ストレージが設定されていません。"},500);const f=await req.formData(),files=f.getAll("images").filter(x=>x instanceof File),urls=[];for(const x of files.slice(0,20)){if(!x.type.startsWith("image/")||x.size>15*1024*1024)continue;const ext=(x.name.split(".").pop()||"jpg").replace(/[^a-zA-Z0-9]/g,"")||"jpg",key=`products/${crypto.randomUUID()}.${ext}`;await env.IMAGES.put(key,x.stream(),{httpMetadata:{contentType:x.type,cacheControl:"public,max-age=31536000,immutable"}});urls.push(`/media/${encodeURIComponent(key)}`)}return json({urls})}async function owner(req,env){const b=await req.json().catch(()=>({}));const ac=Array.isArray(b.accounts)?b.accounts.slice(0,2):[];if(ac.length!==2)return json({error:"管理者アカウントは2件入力してください。"},400);const em=ac.map(x=>String(x.email||"").trim().toLowerCase());if(!em[0]||!em[1]||em[0]===em[1])return json({error:"2つの異なるメールアドレスを入力してください。"},400);const ex=await env.DB.prepare("SELECT id FROM admins ORDER BY id LIMIT 2").all();const ids=(ex.results||[]).map(x=>x.id);for(let i=0;i<2;i++){const pw=String(ac[i].password||"");if(ids[i]){if(pw){if(pw.length<12)return json({error:`管理者${i+1}のパスワードは12文字以上にしてください。`},400);const salt=crypto.randomUUID(),h=await pbkdf2Hex(pw,salt);await env.DB.prepare("UPDATE admins SET email=?,password_hash=?,salt=?,name=? WHERE id=?").bind(em[i],h,salt,`管理者${i+1}`,ids[i]).run()}else await env.DB.prepare("UPDATE admins SET email=?,name=? WHERE id=?").bind(em[i],`管理者${i+1}`,ids[i]).run()}else{if(pw.length<12)return json({error:`管理者${i+1}のパスワードを12文字以上入力してください。`},400);const salt=crypto.randomUUID(),h=await pbkdf2Hex(pw,salt);await env.DB.prepare("INSERT INTO admins(email,password_hash,salt,name) VALUES(?,?,?,?)").bind(em[i],h,salt,`管理者${i+1}`).run()}}return json({ok:true,message:"管理者アカウントを更新しました。"})}async function api(req,env,u){const p=u.pathname;if(req.method==="OPTIONS")return new Response(null,{status:204,headers:corsHeaders});if(p==="/api/health")return json({ok:!!(await env.DB.prepare("SELECT 1").first()),database:"connected",ownerPinConfigured:true});if(p==="/api/setup/admins"&&req.method==="POST")return owner(req,env);if(p==="/api/login"&&req.method==="POST"){const b=await req.json().catch(()=>({})),email=String(b.email||"").trim().toLowerCase(),pw=String(b.password||"");const a=await env.DB.prepare("SELECT id,email,name,password_hash,salt FROM admins WHERE lower(email)=? LIMIT 1").bind(email).first();if(!a)return json({error:"メールアドレスまたはパスワードが正しくありません。"},401);if(await pbkdf2Hex(pw,a.salt)!==a.password_hash)return json({error:"パスワードが正しくありません。もう一度入力してください。"},401);const token=crypto.randomUUID()+crypto.randomUUID().replace(/-/g,""),id=await sha256B64(token),exp=new Date(Date.now()+SESSION_TTL*1000).toISOString();await env.DB.prepare("INSERT INTO sessions(id,admin_id,expires_at) VALUES(?,?,?)").bind(id,a.id,exp).run();return json({email:a.email,name:a.name||""},200,{"Set-Cookie":`${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL}`})}if(p==="/api/logout"&&req.method==="POST"){const t=getCookie(req,SESSION_COOKIE);if(t)await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(await sha256B64(t)).run();return json({ok:true},200,{"Set-Cookie":`${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`})}if(p==="/api/admin/me"){const a=await verifyAdmin(req,env);return a?json({email:a.email,name:a.name||""}):json({error:"ログインが必要です。"},401)}if(p==="/api/products"&&req.method==="GET")return json(await listProducts(env));let m=p.match(/^\/api\/products\/([^/]+)$/);if(m&&req.method==="GET"){const x=await getProduct(env,decodeURIComponent(m[1]));return x?json(x):json({error:"機械が見つかりません。"},404)}if(p==="/api/admin/products"&&req.method==="GET"){const a=await requireAdmin(req,env);return a.response||json(await listProducts(env,true))}if(p==="/api/admin/products"&&req.method==="POST")return createProduct(req,env);if(p==="/api/admin/upload"&&req.method==="POST")return upload(req,env);if(p.match(/^\/api\/admin\/products\/([^/]+)$/)){m=p.match(/^\/api\/admin\/products\/([^/]+)$/);const a=m&&decodeURIComponent(m[1]);if(req.method==="PUT")return updateProduct(req,env,a);if(req.method==="DELETE"){const x=await requireAdmin(req,env);if(x.response)return x.response;const r=await env.DB.prepare("DELETE FROM products WHERE id=?").bind(a).run();return r.meta?.changes?json({ok:true}):json({error:"機械が見つかりません。"},404)}}if(p==="/api/admin/accounts"&&req.method==="POST")return owner(req,env);if(p==="/api/admin/accounts/save"&&req.method==="POST")return owner(req,env);return json({error:"Not Found"},404)}export default{async fetch(req,env){const u=new URL(req.url);if(u.pathname.startsWith("/media/")&&env.IMAGES){const k=decodeURIComponent(u.pathname.slice(7)),o=await env.IMAGES.get(k);if(!o)return new Response("Not Found",{status:404});return new Response(o.body,{headers:{"Content-Type":o.httpMetadata?.contentType||"application/octet-stream","Cache-Control":"public,max-age=31536000"}})}if(u.pathname.startsWith("/api/")){try{return await api(req,env,u)}catch(e){console.error(e);return json({error:"サーバー側でエラーが発生しました。"},500)}}const routes={"/":"/index.html","/products":"/products.html","/product":"/product.html","/admin":"/admin.html"};return env.ASSETS.fetch(new Request(new URL(routes[u.pathname]||u.pathname,u),req))}};
+const SESSION_COOKIE = "yamamoto_admin_session";
+const SESSION_TTL = 60 * 60 * 24 * 7;
+const DEFAULT_LINE_ID = "yamamotoauto";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+function json(data, status = 200, extra = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8", ...extra },
+  });
+}
+
+function nowIso() { return new Date().toISOString(); }
+
+function getCookie(request, name) {
+  for (const part of (request.headers.get("Cookie") || "").split(";")) {
+    const [key, ...value] = part.trim().split("=");
+    if (key === name) return decodeURIComponent(value.join("="));
+  }
+  return null;
+}
+
+function parseJson(value, fallback) {
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function b64(bytes) {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function sha256(value) {
+  return b64(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))));
+}
+
+async function pbkdf2(password, salt, iterations = 120000) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: new TextEncoder().encode(salt), iterations, hash: "SHA-256" }, key, 256);
+  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function productView(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category || "ミニショベル",
+    description: row.description || "",
+    videoUrl: row.video_url || "",
+    priceMode: row.price_mode || "contact",
+    price: row.price || "",
+    status: row.status || "draft",
+    featured: Boolean(row.featured),
+    images: parseJson(row.images_json, []),
+    specs: parseJson(row.specs_json, []),
+    lineId: row.line_id || DEFAULT_LINE_ID,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function getProduct(env, id, includeDraft = false) {
+  const row = await env.DB.prepare("SELECT * FROM yamamoto_products_v2 WHERE id=?").bind(id).first();
+  if (!row || (!includeDraft && !["published", "sold"].includes(row.status))) return null;
+  return productView(row);
+}
+
+async function listProducts(env, includeDraft = false) {
+  const sql = includeDraft
+    ? "SELECT * FROM yamamoto_products_v2 ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'draft' THEN 1 WHEN 'sold' THEN 2 ELSE 9 END, updated_at DESC"
+    : "SELECT * FROM yamamoto_products_v2 WHERE status IN ('published','sold') ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'sold' THEN 1 ELSE 9 END, updated_at DESC";
+  const { results } = await env.DB.prepare(sql).all();
+  return (results || []).map(productView);
+}
+
+async function verifyAdmin(request, env) {
+  const token = getCookie(request, SESSION_COOKIE);
+  if (!token) return null;
+  const tokenHash = await sha256(token);
+  const row = await env.DB.prepare(
+    "SELECT a.email,a.email AS name,s.expires_at FROM yamamoto_sessions_v2 s JOIN yamamoto_admins_v2 a ON a.email=s.email WHERE s.token=? AND s.expires_at>?"
+  ).bind(tokenHash, Date.now()).first();
+  return row || null;
+}
+
+async function requireAdmin(request, env) {
+  const admin = await verifyAdmin(request, env);
+  return admin ? { admin } : { response: json({ error: "ログインが必要です。" }, 401) };
+}
+
+function slugify(title) {
+  const s = String(title || "machine").normalize("NFKD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase();
+  return (s || "machine") + "-" + Date.now().toString(36);
+}
+
+function payload(body) {
+  body = body || {};
+  return {
+    title: String(body.title || "").trim(),
+    category: String(body.category || "ミニショベル").trim() || "ミニショベル",
+    description: String(body.description || "").trim(),
+    videoUrl: String(body.videoUrl || "").trim(),
+    priceMode: ["show", "contact"].includes(body.priceMode) ? body.priceMode : "contact",
+    price: String(body.price || "").trim(),
+    status: ["published", "draft", "sold"].includes(body.status) ? body.status : "draft",
+    featured: Boolean(body.featured),
+    images: Array.isArray(body.images) ? body.images.filter(x => typeof x === "string").slice(0, 20) : [],
+    specs: Array.isArray(body.specs)
+      ? body.specs.filter(x => x && x.key).slice(0, 40).map(x => ({ key: String(x.key).trim(), value: String(x.value || "").trim() })).filter(x => x.key)
+      : [],
+    lineId: String(body.lineId || DEFAULT_LINE_ID).trim() || DEFAULT_LINE_ID,
+  };
+}
+
+async function login(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const email = String(body.email || "").trim().toLowerCase();
+  const password = String(body.password || "");
+  if (!email || !password) return json({ error: "メールアドレスとパスワードを入力してください。" }, 400);
+
+  const admin = await env.DB.prepare("SELECT email,password_hash,salt FROM yamamoto_admins_v2 WHERE lower(email)=? LIMIT 1").bind(email).first();
+  if (!admin) return json({ error: "メールアドレスまたはパスワードが正しくありません。" }, 401);
+  if (await pbkdf2(password, admin.salt) !== admin.password_hash) {
+    return json({ error: "パスワードが正しくありません。もう一度入力してください。" }, 401);
+  }
+
+  const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, "");
+  const tokenHash = await sha256(token);
+  const expires = Date.now() + SESSION_TTL * 1000;
+  await env.DB.prepare("INSERT OR REPLACE INTO yamamoto_sessions_v2(token,email,expires_at,created_at) VALUES(?,?,?,?)")
+    .bind(tokenHash, admin.email, expires, nowIso()).run();
+
+  return json({ email: admin.email, name: admin.email }, 200, {
+    "Set-Cookie": `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL}`
+  });
+}
+
+async function saveAccounts(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const accounts = Array.isArray(body.accounts) ? body.accounts.slice(0, 2) : [];
+  if (accounts.length !== 2) return json({ error: "管理者アカウントは2件入力してください。" }, 400);
+
+  const emails = accounts.map(x => String(x.email || "").trim().toLowerCase());
+  if (!emails[0] || !emails[1] || emails[0] === emails[1]) {
+    return json({ error: "2つの異なるメールアドレスを入力してください。" }, 400);
+  }
+
+  const existing = await env.DB.prepare("SELECT email FROM yamamoto_admins_v2 ORDER BY created_at LIMIT 2").all();
+  const rows = existing.results || [];
+
+  for (let i = 0; i < 2; i++) {
+    const password = String(accounts[i].password || "");
+    const old = rows[i];
+    if (old && !password) {
+      await env.DB.prepare("UPDATE yamamoto_admins_v2 SET email=? WHERE email=?").bind(emails[i], old.email).run();
+      await env.DB.prepare("UPDATE yamamoto_sessions_v2 SET email=? WHERE email=?").bind(emails[i], old.email).run();
+      continue;
+    }
+    if (password.length < 12) return json({ error: `管理者${i + 1}のパスワードは12文字以上にしてください。` }, 400);
+    const salt = crypto.randomUUID();
+    const hash = await pbkdf2(password, salt);
+    if (old) {
+      await env.DB.prepare("UPDATE yamamoto_admins_v2 SET email=?,password_hash=?,salt=? WHERE email=?")
+        .bind(emails[i], hash, salt, old.email).run();
+      await env.DB.prepare("UPDATE yamamoto_sessions_v2 SET email=? WHERE email=?").bind(emails[i], old.email).run();
+    } else {
+      await env.DB.prepare("INSERT INTO yamamoto_admins_v2(email,password_hash,salt,created_at) VALUES(?,?,?,?)")
+        .bind(emails[i], hash, salt, nowIso()).run();
+    }
+  }
+  return json({ ok: true, message: "管理者アカウントを更新しました。" });
+}
+
+async function saveProduct(request, env, id = null) {
+  const auth = await requireAdmin(request, env);
+  if (auth.response) return auth.response;
+  const p = payload(await request.json().catch(() => ({})));
+  if (!p.title) return json({ error: "機械タイトルを入力してください。" }, 400);
+  const now = nowIso();
+  const productId = id || slugify(p.title);
+
+  if (p.featured) await env.DB.prepare("UPDATE yamamoto_products_v2 SET featured=0 WHERE id<>?").bind(productId).run();
+
+  if (id) {
+    const exists = await env.DB.prepare("SELECT id FROM yamamoto_products_v2 WHERE id=?").bind(id).first();
+    if (!exists) return json({ error: "機械が見つかりません。" }, 404);
+    await env.DB.prepare("UPDATE yamamoto_products_v2 SET title=?,category=?,description=?,video_url=?,price_mode=?,price=?,status=?,featured=?,images_json=?,specs_json=?,line_id=?,updated_at=? WHERE id=?")
+      .bind(p.title,p.category,p.description,p.videoUrl,p.priceMode,p.price,p.status,p.featured?1:0,JSON.stringify(p.images),JSON.stringify(p.specs),p.lineId,now,id).run();
+  } else {
+    await env.DB.prepare("INSERT INTO yamamoto_products_v2(id,title,category,description,video_url,price_mode,price,status,featured,images_json,specs_json,line_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(productId,p.title,p.category,p.description,p.videoUrl,p.priceMode,p.price,p.status,p.featured?1:0,JSON.stringify(p.images),JSON.stringify(p.specs),p.lineId,now,now).run();
+  }
+  return json({ product: await getProduct(env, productId, true) }, id ? 200 : 201);
+}
+
+async function upload(request, env) {
+  const auth = await requireAdmin(request, env);
+  if (auth.response) return auth.response;
+  if (!env.IMAGES) return json({ error: "画像ストレージが設定されていません。" }, 500);
+  const form = await request.formData();
+  const files = form.getAll("images").filter(x => x instanceof File);
+  const urls = [];
+  for (const file of files.slice(0, 20)) {
+    if (!file.type.startsWith("image/") || file.size > 15 * 1024 * 1024) continue;
+    const ext = (file.name.split(".").pop() || "jpg").replace(/[^a-zA-Z0-9]/g, "") || "jpg";
+    const key = `products/${crypto.randomUUID()}.${ext}`;
+    await env.IMAGES.put(key, file.stream(), { httpMetadata: { contentType: file.type, cacheControl: "public,max-age=31536000,immutable" } });
+    urls.push(`/media/${encodeURIComponent(key)}`);
+  }
+  return json({ urls });
+}
+
+async function api(request, env, url) {
+  const path = url.pathname;
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+
+  if (path === "/api/health") {
+    const db = await env.DB.prepare("SELECT 1 AS ok").first();
+    return json({ ok: db?.ok === 1, database: "connected", storage: Boolean(env.IMAGES) });
+  }
+
+  if (path === "/api/login" && request.method === "POST") return login(request, env);
+  if (path === "/api/logout" && request.method === "POST") {
+    const token = getCookie(request, SESSION_COOKIE);
+    if (token) await env.DB.prepare("DELETE FROM yamamoto_sessions_v2 WHERE token=?").bind(await sha256(token)).run();
+    return json({ ok: true }, 200, { "Set-Cookie": `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0` });
+  }
+  if (path === "/api/admin/me") {
+    const a = await verifyAdmin(request, env);
+    return a ? json({ email: a.email, name: a.name || a.email }) : json({ error: "ログインが必要です。" }, 401);
+  }
+
+  if (path === "/api/setup/admins" && request.method === "POST") return saveAccounts(request, env);
+  if (path === "/api/admin/accounts" && request.method === "POST") {
+    const auth = await requireAdmin(request, env);
+    if (auth.response) return auth.response;
+    return saveAccounts(request, env);
+  }
+  if (path === "/api/admin/accounts/save" && request.method === "POST") {
+    const auth = await requireAdmin(request, env);
+    if (auth.response) return auth.response;
+    return saveAccounts(request, env);
+  }
+
+  if (path === "/api/products" && request.method === "GET") return json(await listProducts(env));
+  let match = path.match(/^\/api\/products\/([^/]+)$/);
+  if (match && request.method === "GET") {
+    const p = await getProduct(env, decodeURIComponent(match[1]));
+    return p ? json(p) : json({ error: "機械が見つかりません。" }, 404);
+  }
+
+  if (path === "/api/admin/products" && request.method === "GET") {
+    const auth = await requireAdmin(request, env);
+    if (auth.response) return auth.response;
+    return json(await listProducts(env, true));
+  }
+  if (path === "/api/admin/products" && request.method === "POST") return saveProduct(request, env);
+  if (path === "/api/admin/upload" && request.method === "POST") return upload(request, env);
+
+  match = path.match(/^\/api\/admin\/products\/([^/]+)$/);
+  if (match) {
+    const id = decodeURIComponent(match[1]);
+    if (request.method === "PUT") return saveProduct(request, env, id);
+    if (request.method === "DELETE") {
+      const auth = await requireAdmin(request, env);
+      if (auth.response) return auth.response;
+      const result = await env.DB.prepare("DELETE FROM yamamoto_products_v2 WHERE id=?").bind(id).run();
+      return result.meta?.changes ? json({ ok: true }) : json({ error: "機械が見つかりません。" }, 404);
+    }
+  }
+
+  return json({ error: "Not Found" }, 404);
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    try {
+      if (url.pathname.startsWith("/media/") && env.IMAGES) {
+        const key = decodeURIComponent(url.pathname.slice(7));
+        const object = await env.IMAGES.get(key);
+        if (!object) return new Response("Not Found", { status: 404 });
+        return new Response(object.body, { headers: {
+          "Content-Type": object.httpMetadata?.contentType || "application/octet-stream",
+          "Cache-Control": "public,max-age=31536000,immutable"
+        }});
+      }
+      if (url.pathname.startsWith("/api/")) return await api(request, env, url);
+      const routes = { "/": "/index.html", "/products": "/products.html", "/product": "/product.html", "/admin": "/admin.html" };
+      return env.ASSETS.fetch(new Request(new URL(routes[url.pathname] || url.pathname, url), request));
+    } catch (error) {
+      console.error("Worker error:", error);
+      return json({ error: "サーバー側でエラーが発生しました。" }, 500);
+    }
+  }
+};

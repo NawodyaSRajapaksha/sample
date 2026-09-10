@@ -25,6 +25,58 @@
       <button id="addMachineBtn" class="btn red" type="button">+ 機械を追加</button>
     </div>
   </div>
+<div id="adminSettings" class="panel hidden">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+    <h2 style="font-size:24px">管理者設定</h2>
+    <button id="closeAdminSettingsBtn" class="btn" type="button">閉じる</button>
+  </div>
+
+  <p class="muted">
+    管理者アカウントを変更する場合は、オーナーPINを入力してください。
+  </p>
+
+  <div class="field">
+    <label>オーナーPIN</label>
+    <input id="ownerPin" type="password" placeholder="オーナーPIN">
+  </div>
+
+  <div class="admin-grid">
+    <div class="panel" style="padding:16px">
+      <h3>管理者 1</h3>
+
+      <div class="field">
+        <label>メールアドレス</label>
+        <input id="admin1Email" type="email">
+      </div>
+
+      <div class="field">
+        <label>新しいパスワード</label>
+        <input id="admin1Password" type="password" placeholder="変更する場合のみ入力">
+      </div>
+    </div>
+
+    <div class="panel" style="padding:16px">
+      <h3>管理者 2</h3>
+
+      <div class="field">
+        <label>メールアドレス</label>
+        <input id="admin2Email" type="email">
+      </div>
+
+      <div class="field">
+        <label>新しいパスワード</label>
+        <input id="admin2Password" type="password" placeholder="変更する場合のみ入力">
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="loadAdminsBtn" type="button" class="btn">現在の情報を読み込む</button>
+    <button id="saveAdminsBtn" type="button" class="btn primary">保存する</button>
+  </div>
+
+  <p id="adminSettingsMsg" class="muted"></p>
+</div>
 <div id="editor" class="panel hidden">
   <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h2 id="editorTitle" style="font-size:28px">機械を追加</h2><button id="closeEditorBtn" class="btn" type="button">閉じる</button></div>
   <input type="hidden" id="pid">

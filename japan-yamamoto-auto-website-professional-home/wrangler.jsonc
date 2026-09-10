@@ -27,9 +27,3 @@
     }
   ]
 }
-    {
-      "binding": "IMAGES",
-      "bucket_name": "yamamoto-auto-images"
-    }
-  ]
-}

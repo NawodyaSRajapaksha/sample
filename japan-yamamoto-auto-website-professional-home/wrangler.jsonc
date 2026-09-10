@@ -3,18 +3,27 @@
   "name": "yamamoto-auto",
   "main": "src/worker.js",
   "compatibility_date": "2026-09-10",
+
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "none"
   },
+
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "yamamoto-auto-db",
-     "database_id": "e4d58e8a-4613-4c4d-abcd-3067e7f46a83",
+      "database_id": "e4d58e8a-4613-4c4d-abcd-3067e7f46a83",
       "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "IMAGES",
+      "bucket_name": "yamamoto-auto-images"
     }
   ]
 }

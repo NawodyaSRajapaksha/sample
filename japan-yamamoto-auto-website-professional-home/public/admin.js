@@ -298,3 +298,103 @@ function initAdminControls(){
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", initAdminControls, {once:true});
 else initAdminControls();
 check();
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  $("adminSettingsBtn")?.addEventListener("click", () => {
+    $("adminSettings").classList.remove("hidden");
+  });
+
+  $("closeAdminSettingsBtn")?.addEventListener("click", () => {
+    $("adminSettings").classList.add("hidden");
+    $("adminSettingsMsg").textContent = "";
+  });
+
+  async function ownerApi(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: "include",
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.error || "サーバー側でエラーが発生しました。");
+    }
+
+    return data;
+  }
+
+  $("loadAdminsBtn")?.addEventListener("click", async () => {
+    const pin = $("ownerPin").value.trim();
+
+    if (!pin) {
+      $("adminSettingsMsg").textContent = "オーナーPINを入力してください。";
+      return;
+    }
+
+    $("adminSettingsMsg").textContent = "読み込み中…";
+
+    try {
+      const data = await ownerApi("/api/admin/accounts", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "list",
+          ownerPin: pin
+        })
+      });
+
+      $("admin1Email").value = data.admins?.[0]?.email || "";
+      $("admin2Email").value = data.admins?.[1]?.email || "";
+      $("adminSettingsMsg").textContent = "現在の管理者情報を読み込みました。";
+    } catch (error) {
+      $("adminSettingsMsg").textContent = error.message;
+    }
+  });
+
+  $("saveAdminsBtn")?.addEventListener("click", async () => {
+    const pin = $("ownerPin").value.trim();
+
+    if (!pin) {
+      $("adminSettingsMsg").textContent = "オーナーPINを入力してください。";
+      return;
+    }
+
+    const payload = {
+      action: "update",
+      ownerPin: pin,
+      admins: [
+        {
+          email: $("admin1Email").value.trim(),
+          password: $("admin1Password").value
+        },
+        {
+          email: $("admin2Email").value.trim(),
+          password: $("admin2Password").value
+        }
+      ]
+    };
+
+    $("adminSettingsMsg").textContent = "保存中…";
+
+    try {
+      await ownerApi("/api/admin/accounts", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      $("admin1Password").value = "";
+      $("admin2Password").value = "";
+      $("adminSettingsMsg").textContent =
+        "管理者情報を保存しました。";
+    } catch (error) {
+      $("adminSettingsMsg").textContent = error.message;
+    }
+  });
+})();
+</script>

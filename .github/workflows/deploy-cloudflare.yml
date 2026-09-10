@@ -27,20 +27,13 @@ jobs:
 
       - name: Check Cloudflare credentials
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "CLOUDFLARE_API_TOKEN GitHub secret is missing."
-            exit 1
-          fi
-          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "CLOUDFLARE_ACCOUNT_ID GitHub secret is missing."
-            exit 1
-          fi
-          echo "Cloudflare credentials are present."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "CLOUDFLARE_API_TOKEN GitHub secret is missing."; exit 1; fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then echo "CLOUDFLARE_ACCOUNT_ID GitHub secret is missing."; exit 1; fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Fix PBKDF2 implementation for Workers
+      - name: Fix PBKDF2 implementation and expose exact login error
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -50,16 +43,13 @@ jobs:
               s = 'import { pbkdf2 as nodePbkdf2 } from "node:crypto";\n' + s
           old = 'async function pbkdf2(password,salt,iterations=120000){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:new TextEncoder().encode(salt),iterations,hash:"SHA-256"},key,256);return hex(bits)}'
           new = 'async function pbkdf2(password,salt,iterations=120000){return await new Promise((resolve,reject)=>nodePbkdf2(password,salt,iterations,32,"sha256",(error,key)=>error?reject(error):resolve(key.toString("hex"))));}'
-          if old not in s:
-              raise SystemExit("PBKDF2 function was not found")
+          if old not in s: raise SystemExit("PBKDF2 function was not found")
           s = s.replace(old, new, 1)
-          old_error = 'return json({error:(error && error.message) ? error.message : "サーバーエラーが発生しました。"},500)'
-          new_error = 'return json({error:"サーバーエラーが発生しました。"},500)'
-          s = s.replace(old_error, new_error, 1)
+          s = s.replace('return json({error:"サーバーエラーが発生しました。"},500)', 'return json({error:(error && error.message) ? error.message : "サーバーエラーが発生しました。"},500)', 1)
           p.write_text(s)
           PY
 
-      - name: Deploy Worker, assets, D1 and R2 bindings
+      - name: Deploy Worker
         run: npx --yes wrangler@latest deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

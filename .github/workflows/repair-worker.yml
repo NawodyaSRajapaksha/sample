@@ -1,14 +1,14 @@
 name: Repair Yamamoto Worker
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   repair:
-    if: ${{ !contains(github.event.head_commit.message, 'Fix worker image limits and sold image cleanup') }}
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -17,43 +17,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore known-good worker and apply requested changes
+      - name: Restore and repair worker
         run: |
           set -e
-          if grep -q "AUTH_RESET_VERSION = '2026-09-11-v3'" src/worker.js; then
-            git checkout 973a36d0d6fdbe8febd4892302e0acae5dfd5b9e -- src/worker.js
-            python3 - <<'PY'
+          git checkout 973a36d0d6fdbe8febd4892302e0acae5dfd5b9e -- src/worker.js
+          python3 - <<'PY'
 from pathlib import Path
 import re
-
-path = Path('src/worker.js')
-text = path.read_text()
-text = text.replace('.slice(0,20):[]', '.slice(0,30):[]', 1)
-text = text.replace('files.slice(0,20)', 'files.slice(0,30)', 1)
-
-helpers = '''function mediaKey(url){try{const path=new URL(String(url),"https://yamamoto-auto.local").pathname;return path.startsWith("/media/")?decodeURIComponent(path.slice(7)):null}catch{return null}}
+p = Path('src/worker.js')
+s = p.read_text()
+s = s.replace('.slice(0,20):[]', '.slice(0,30):[]', 1)
+s = s.replace('files.slice(0,20)', 'files.slice(0,30)', 1)
+helper = '''function mediaKey(url){try{const path=new URL(String(url),"https://yamamoto-auto.local").pathname;return path.startsWith("/media/")?decodeURIComponent(path.slice(7)):null}catch{return null}}
 async function deleteMediaObjects(env,urls){if(!env.IMAGES||!Array.isArray(urls))return;for(const url of urls){const key=mediaKey(url);if(!key)continue;try{await env.IMAGES.delete(key)}catch(error){console.error("image cleanup failed",key,error)}}}
 '''
-
-new_save = '''async function saveProduct(request,env,id=null){const auth=await requireAdmin(request,env);if(auth.response)return auth.response;const p=payload(await request.json().catch(()=>({})));if(!p.title)return json({error:"機械タイトルを入力してください。"},400);const now=nowIso(),productId=id||slugify(p.title);let imagesToDelete=[];if(p.status==="sold"&&p.images.length>5){imagesToDelete=p.images.slice(5);p.images=p.images.slice(0,5)}if(p.featured)await env.DB.prepare("UPDATE yamamoto_products_v2 SET featured=0 WHERE id<>?").bind(productId).run();if(id){const exists=await env.DB.prepare("SELECT id FROM yamamoto_products_v2 WHERE id=?").bind(id).first();if(!exists)return json({error:"機械が見つかりません。"},404);await env.DB.prepare("UPDATE yamamoto_products_v2 SET title=?,category=?,description=?,video_url=?,price_mode=?,price=?,status=?,featured=?,images_json=?,specs_json=?,line_id=?,updated_at=? WHERE id=?").bind(p.title,p.category,p.description,p.videoUrl,p.priceMode,p.price,p.status,p.featured?1:0,JSON.stringify(p.images),JSON.stringify(p.specs),p.lineId,now,id).run()}else{await env.DB.prepare("INSERT INTO yamamoto_products_v2(id,title,category,description,video_url,price_mode,price,status,featured,images_json,specs_json,line_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(productId,p.title,p.category,p.description,p.videoUrl,p.priceMode,p.price,p.status,p.featured?1:0,JSON.stringify(p.images),JSON.stringify(p.specs),p.lineId,now,now).run()}await deleteMediaObjects(env,imagesToDelete);return json({product:await getProduct(env,productId,true)},id?200:201)}
+replacement = '''async function saveProduct(request,env,id=null){const auth=await requireAdmin(request,env);if(auth.response)return auth.response;const p=payload(await request.json().catch(()=>({})));if(!p.title)return json({error:"機械タイトルを入力してください。"},400);const now=nowIso(),productId=id||slugify(p.title);let imagesToDelete=[];if(p.status==="sold"&&p.images.length>5){imagesToDelete=p.images.slice(5);p.images=p.images.slice(0,5)}if(p.featured)await env.DB.prepare("UPDATE yamamoto_products_v2 SET featured=0 WHERE id<>?").bind(productId).run();if(id){const exists=await env.DB.prepare("SELECT id FROM yamamoto_products_v2 WHERE id=?").bind(id).first();if(!exists)return json({error:"機械が見つかりません。"},404);await env.DB.prepare("UPDATE yamamoto_products_v2 SET title=?,category=?,description=?,video_url=?,price_mode=?,price=?,status=?,featured=?,images_json=?,specs_json=?,line_id=?,updated_at=? WHERE id=?").bind(p.title,p.category,p.description,p.videoUrl,p.priceMode,p.price,p.status,p.featured?1:0,JSON.stringify(p.images),JSON.stringify(p.specs),p.lineId,now,id).run()}else{await env.DB.prepare("INSERT INTO yamamoto_products_v2(id,title,category,description,video_url,price_mode,price,status,featured,images_json,specs_json,line_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(productId,p.title,p.category,p.description,p.videoUrl,p.priceMode,p.price,p.status,p.featured?1:0,JSON.stringify(p.images),JSON.stringify(p.specs),p.lineId,now,now).run()}await deleteMediaObjects(env,imagesToDelete);return json({product:await getProduct(env,productId,true)},id?200:201)}
 '''
-
-pattern = r'async function saveProduct\(request,env,id=null\)\{.*?\}\nasync function upload'
-text, count = re.subn(pattern, helpers + new_save + 'async function upload', text, count=1, flags=re.S)
-if count != 1:
-    raise SystemExit('saveProduct was not found')
-
-path.write_text(text)
+s, n = re.subn(r'async function saveProduct\(request,env,id=null\)\{.*?\}\nasync function upload', helper + replacement + 'async function upload', s, count=1, flags=re.S)
+if n != 1: raise SystemExit('saveProduct replacement failed')
+p.write_text(s)
 PY
-
-            grep -q 'slice(0,30)' src/worker.js
-            grep -q 'imagesToDelete' src/worker.js
-
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/worker.js
-            git commit -m "Fix worker image limits and sold image cleanup"
-            git push
-          else
-            echo "Worker is already repaired."
-          fi
+          node --check src/worker.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/worker.js
+          git commit -m "Fix worker image limits and sold image cleanup"
+          git push

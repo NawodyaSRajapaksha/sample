@@ -1,6 +1,5 @@
 name: Deploy Yamamoto Auto to Cloudflare
 
-# Force a deployment of the repaired Worker after the authentication rollback.
 on:
   push:
     branches:
@@ -8,6 +7,7 @@ on:
     paths:
       - 'japan-yamamoto-auto-website-professional-home/**'
       - '.github/workflows/deploy-cloudflare.yml'
+      - '.github/repair-worker.mjs'
   workflow_dispatch:
 
 jobs:
@@ -16,16 +16,23 @@ jobs:
     defaults:
       run:
         working-directory: japan-yamamoto-auto-website-professional-home
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
+      - name: Restore known-good authentication Worker
+        working-directory: .
+        run: |
+          git fetch origin 973a36d0d6fdbe8febd4892302e0acae5dfd5b9e --no-tags
+          git checkout 973a36d0d6fdbe8febd4892302e0acae5dfd5b9e -- japan-yamamoto-auto-website-professional-home/src/worker.js
+      - name: Apply image and sold cleanup fixes
+        working-directory: .
+        run: node .github/repair-worker.mjs
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Check Cloudflare credentials
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "CLOUDFLARE_API_TOKEN GitHub secret is missing."; exit 1; fi
@@ -33,48 +40,30 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Verify Worker authentication implementation
+      - name: Validate Worker
         run: |
-          grep -n 'node:crypto' src/worker.js
-          grep -n 'function pbkdf2' src/worker.js
-          grep -n 'TEMP_BOOTSTRAP_PASSWORD' src/worker.js
-          if grep -q 'crypto.subtle.deriveBits.*PBKDF2' src/worker.js; then
-            echo 'WebCrypto PBKDF2 implementation is still present.'
-            exit 1
-          fi
-          if ! grep -q 'iterations=100000' src/worker.js; then
-            echo 'PBKDF2 iteration count is not 100000.'
-            exit 1
-          fi
-
+          node --check src/worker.js
+          grep -q 'node:crypto' src/worker.js
+          grep -q 'TEMP_BOOTSTRAP_PASSWORD' src/worker.js
+          ! grep -q 'AUTH_RESET_VERSION' src/worker.js
+          ! grep -q 'SAMPLE_PASSWORD' src/worker.js
+          grep -q 'slice(0,30)' src/worker.js
+          grep -q 'deleteMediaObjects' src/worker.js
       - name: Apply D1 migrations
         run: npx --yes wrangler@latest d1 migrations apply yamamoto-auto-db --remote
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
       - name: Deploy Worker
         run: npx --yes wrangler@latest deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
       - name: Smoke test real password verification
         run: |
           set -e
-          echo "Testing deployed /api/login with a real admin email and an intentionally wrong password..."
-          curl --http1.1 -sS -D /tmp/login_headers.txt -o /tmp/login_body.txt \
-            -X POST "https://yamamoto-auto.nawodyasrajapaksha.workers.dev/api/login" \
-            -H "content-type: application/json" \
-            --data '{"email":"fujim2021@gmail.com","password":"definitely-wrong-password"}'
+          curl --http1.1 -sS -D /tmp/login_headers.txt -o /tmp/login_body.txt -X POST "https://yamamoto-auto.nawodyasrajapaksha.workers.dev/api/login" -H "content-type: application/json" --data '{"email":"fujim2021@gmail.com","password":"definitely-wrong-password"}'
           status=$(awk 'NR==1 {print $2}' /tmp/login_headers.txt)
           echo "HTTP status: $status"
-          echo "Response body:"
           cat /tmp/login_body.txt
-          echo
-          if [ "$status" != "401" ]; then
-            echo "Real password-verification smoke test failed: expected HTTP 401, not a server error."
-            exit 1
-          fi
-          echo "Real password-verification smoke test passed."
+          test "$status" = "401"

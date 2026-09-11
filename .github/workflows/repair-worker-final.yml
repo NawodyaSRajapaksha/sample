@@ -24,8 +24,7 @@ jobs:
           git checkout 973a36d0d6fdbe8febd4892302e0acae5dfd5b9e -- japan-yamamoto-auto-website-professional-home/src/worker.js
 
       - name: Apply image and sold cleanup fixes
-        working-directory: japan-yamamoto-auto-website-professional-home
-        run: node ../.github/repair-worker.mjs
+        run: node .github/repair-worker.mjs
 
       - name: Validate Worker
         working-directory: japan-yamamoto-auto-website-professional-home

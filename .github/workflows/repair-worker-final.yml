@@ -1,0 +1,48 @@
+name: Final Yamamoto Worker Repair
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore known-good Worker
+        run: |
+          git fetch origin 973a36d0d6fdbe8febd4892302e0acae5dfd5b9e --no-tags
+          git checkout 973a36d0d6fdbe8febd4892302e0acae5dfd5b9e -- japan-yamamoto-auto-website-professional-home/src/worker.js
+
+      - name: Apply image and sold cleanup fixes
+        working-directory: japan-yamamoto-auto-website-professional-home
+        run: node ../.github/repair-worker.mjs
+
+      - name: Validate Worker
+        working-directory: japan-yamamoto-auto-website-professional-home
+        run: node --check src/worker.js
+
+      - name: Confirm authentication is preserved
+        working-directory: japan-yamamoto-auto-website-professional-home
+        run: |
+          grep -q "TEMP_BOOTSTRAP_PASSWORD" src/worker.js
+          ! grep -q "AUTH_RESET_VERSION" src/worker.js
+          ! grep -q "SAMPLE_PASSWORD" src/worker.js
+
+      - name: Commit repaired Worker
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add japan-yamamoto-auto-website-professional-home/src/worker.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Repair Worker image limits and sold cleanup"
+          git push origin main

@@ -1,5 +1,6 @@
 name: Deploy Yamamoto Auto to Cloudflare
 
+# Force a deployment of the repaired Worker after the authentication rollback.
 on:
   push:
     branches:

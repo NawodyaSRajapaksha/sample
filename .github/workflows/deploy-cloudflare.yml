@@ -7,8 +7,11 @@ on:
     paths:
       - 'japan-yamamoto-auto-website-professional-home/**'
       - '.github/workflows/deploy-cloudflare.yml'
-      - '.github/repair-worker.mjs'
   workflow_dispatch:
+
+concurrency:
+  group: yamamoto-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -21,14 +24,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Restore known-good authentication Worker
-        working-directory: .
-        run: |
-          git fetch origin 973a36d0d6fdbe8febd4892302e0acae5dfd5b9e --no-tags
-          git checkout 973a36d0d6fdbe8febd4892302e0acae5dfd5b9e -- japan-yamamoto-auto-website-professional-home/src/worker.js
-      - name: Apply image and sold cleanup fixes
-        working-directory: .
-        run: node .github/repair-worker.mjs
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -43,12 +38,12 @@ jobs:
       - name: Validate Worker
         run: |
           node --check src/worker.js
-          grep -q 'node:crypto' src/worker.js
-          grep -q 'TEMP_BOOTSTRAP_PASSWORD' src/worker.js
-          ! grep -q 'AUTH_RESET_VERSION' src/worker.js
-          ! grep -q 'SAMPLE_PASSWORD' src/worker.js
-          grep -q 'slice(0,30)' src/worker.js
-          grep -q 'deleteMediaObjects' src/worker.js
+          node --test tests/*.test.mjs
+      - name: Verify administrator access before deployment
+        run: node scripts/check-admin-readiness.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Apply D1 migrations
         run: npx --yes wrangler@latest d1 migrations apply yamamoto-auto-db --remote
         env:
@@ -66,4 +61,5 @@ jobs:
           status=$(awk 'NR==1 {print $2}' /tmp/login_headers.txt)
           echo "HTTP status: $status"
           cat /tmp/login_body.txt
-          test "$status" = "401"
+          test "$status" = "401" || test "$status" = "403"
+

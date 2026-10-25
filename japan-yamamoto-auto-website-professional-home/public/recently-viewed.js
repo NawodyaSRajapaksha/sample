@@ -3,7 +3,7 @@
   const MAX = 6;
 
   function getItems(){
-    try { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
+    try { const items=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(items)?items.filter(item=>{try{const u=new URL(item.url,location.origin);return u.origin===location.origin&&/\/product(?:\.html)?\/?$/.test(u.pathname)}catch{return false}}).slice(0,MAX):[]; }
     catch(e){ return []; }
   }
 
@@ -46,7 +46,7 @@
     section.hidden = false;
     container.innerHTML = items.map(item => `
       <a class="product-card" href="${escapeHtml(item.url)}">
-        ${item.image ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}">` : ''}
+        ${item.image ? `<img src="${escapeHtml(safeRecentImage(item.image))}" alt="${escapeHtml(item.title)}">` : ''}
         <div class="product-card-body">
           <h3>${escapeHtml(item.title)}</h3>
           <span class="muted">最近見た機械 →</span>
@@ -55,6 +55,7 @@
     `).join('');
   }
 
+  function safeRecentImage(value){try{const u=new URL(value,location.origin);return u.origin===location.origin?u.href:"/assets/image-placeholder.svg"}catch{return "/assets/image-placeholder.svg"}}
   function escapeHtml(value){
     return String(value || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   }
@@ -62,3 +63,4 @@
   window.recordRecentlyViewed = recordRecentlyViewed;
   window.renderRecentlyViewed = renderRecentlyViewed;
 })();
+

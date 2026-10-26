@@ -5,7 +5,7 @@
 
   const imageOf = (product) => {
     const image = Array.isArray(product.images) ? product.images[0] : "";
-    return image || "/assets/kubota-kh012.jpg";
+    return typeof image === "string" && /^\/(media|assets)\//.test(image) ? image : "/assets/image-placeholder.svg";
   };
 
   const priceOf = (product) => {
@@ -16,7 +16,7 @@
   const productCard = (product) => `
     <a class="product-card" href="product.html?id=${encodeURIComponent(product.id)}">
       <div class="product-image-wrap">
-        <img class="product-img" src="${esc(imageOf(product))}" alt="${esc(product.title)}" onerror="this.onerror=null;this.src='/assets/kubota-kh012.jpg'">
+        <img class="product-img" src="${esc(imageOf(product))}" alt="${esc(product.title)}" onerror="this.onerror=null;this.src='/assets/image-placeholder.svg'">
       </div>
       <div class="product-body">
         <div class="product-meta">${esc(product.category || "ミニショベル")}</div>
@@ -37,7 +37,7 @@
 
   const featuredFeature = (product) => `
     <a href="product.html?id=${encodeURIComponent(product.id)}" style="display:block">
-      <img src="${esc(imageOf(product))}" alt="${esc(product.title)}" onerror="this.onerror=null;this.src='/assets/kubota-kh012.jpg'">
+      <img src="${esc(imageOf(product))}" alt="${esc(product.title)}" onerror="this.onerror=null;this.src='/assets/image-placeholder.svg'">
       <div class="hero-card-body">
         <span class="pill">おすすめ</span>
         <h3 style="font-size:22px;margin-top:10px">${esc(product.title)}</h3>
@@ -57,14 +57,15 @@
       const published = Array.isArray(products)
         ? products.filter(p => p && p.status === "published")
         : [];
-      const featuredProducts = published.filter(p => p.featured);
+      const selected = published.filter(p => p.featured);
+      const featuredProducts = selected.length ? selected : published.slice(0,3);
 
       if (hero) hero.innerHTML = featuredProducts[0] ? featuredFeature(featuredProducts[0]) : emptyFeature();
 
       if (featured) {
         featured.innerHTML = featuredProducts.length
           ? featuredProducts.slice(0, 3).map(productCard).join("")
-          : `<div class="notice" style="grid-column:1/-1">現在、掲載中の機械はありません。管理画面から機械を登録すると、ここに表示されます。</div>`;
+          : `<div class="notice" style="grid-column:1/-1">現在、掲載中の機械はありません。入荷状況については、お電話またはLINEでお問い合わせください。</div>`;
       }
     } catch (error) {
       if (hero) hero.innerHTML = emptyFeature();
@@ -79,3 +80,4 @@
     loadHomePage();
   }
 })();
+

@@ -1,0 +1,31 @@
+name: Recover business admin access
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yamamoto-admin-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: japan-yamamoto-auto-website-professional-home
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Reset business admin password and revoke old sessions
+        run: node scripts/reset-admin.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          YAMAMOTO_ADMIN_EMAIL: fujim2021@gmail.com
+          YAMAMOTO_ADMIN_PASSWORD: ${{ secrets.YAMAMOTO_RECOVERY_PASSWORD }}
+      - name: Verify an administrator can use a non-legacy password
+        run: node scripts/check-admin-readiness.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
